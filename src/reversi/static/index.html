@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reversi Agent Arena</title>
+  <link rel="stylesheet" href="/static/styles.css?v=5" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="brand-icon" aria-hidden="true">⚫⚪</span>
+      <div>
+        <h1 class="brand-title">Reversi Agent Arena</h1>
+        <p class="brand-sub">Human &amp; AI Agent Battle / Spectator Console</p>
+      </div>
+    </div>
+
+    <div class="topbar-controls">
+      <div class="game-picker">
+        <select id="game-select" aria-label="対局を選択"></select>
+        <button id="refresh-games-btn" class="btn btn-ghost" title="対局一覧を更新">↻</button>
+      </div>
+      <div class="new-game-bar">
+        <input id="new-game-title" type="text" placeholder="対局名（任意）" maxlength="80" />
+        <button id="create-game-btn" class="btn btn-primary">＋ 新規対局</button>
+      </div>
+      <div class="topbar-links">
+        <a href="/docs" target="_blank" rel="noopener" class="btn btn-ghost">API Docs</a>
+        <a href="/api/guide" target="_blank" rel="noopener" class="btn btn-ghost">AI Guide</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Left Column: Players & Board -->
+    <section class="board-column">
+      <div class="status-bar">
+        <div class="status-title-group">
+          <h2 id="game-title">対局を読み込み中...</h2>
+          <span id="game-id-pill" class="pill pill-muted">ID: -</span>
+        </div>
+        <div class="status-right">
+          <span id="status-badge" class="pill pill-live">接続中</span>
+          <span id="sse-indicator" class="sse-dot" title="リアルタイム接続状態"></span>
+        </div>
+      </div>
+
+      <!-- Player Name Input (used when clicking Join) -->
+      <div class="join-name-row" id="join-name-row">
+        <label for="player-name-input">あなたの名前:</label>
+        <input id="player-name-input" type="text" value="Human" maxlength="40" placeholder="プレイヤー名" />
+        <span id="seat-status-hint" class="muted-text">空席のボタンを押すと対局に参加できます（押さなければ観戦モード）</span>
+      </div>
+
+      <!-- Scoreboard -->
+      <div class="scoreboard">
+        <div class="player-card" id="card-B">
+          <div class="player-header">
+            <span class="stone-badge stone-B"></span>
+            <div class="player-meta">
+              <div class="player-role">黒 (先手 / B)</div>
+              <div class="player-name" id="name-B">空席</div>
+            </div>
+            <div class="player-score" id="score-B">2</div>
+          </div>
+          <div class="player-actions" id="actions-B"></div>
+        </div>
+
+        <div class="player-card" id="card-W">
+          <div class="player-header">
+            <span class="stone-badge stone-W"></span>
+            <div class="player-meta">
+              <div class="player-role">白 (後手 / W)</div>
+              <div class="player-name" id="name-W">空席</div>
+            </div>
+            <div class="player-score" id="score-W">2</div>
+          </div>
+          <div class="player-actions" id="actions-W"></div>
+        </div>
+      </div>
+
+      <!-- Winner / Turn Banner -->
+      <div id="turn-banner" class="turn-banner">対局を選択または作成してください</div>
+
+      <!-- Reversi Board -->
+      <div class="board-frame">
+        <div class="col-labels" aria-hidden="true">
+          <span></span>
+          <span>A</span><span>B</span><span>C</span><span>D</span>
+          <span>E</span><span>F</span><span>G</span><span>H</span>
+        </div>
+        <div class="board-body">
+          <div class="row-labels" aria-hidden="true">
+            <span>1</span><span>2</span><span>3</span><span>4</span>
+            <span>5</span><span>6</span><span>7</span><span>8</span>
+          </div>
+          <div id="board" class="board-grid" role="grid" aria-label="リバーシ盤面"></div>
+        </div>
+      </div>
+
+      <!-- Optional Human Comment Bar -->
+      <div id="move-comment-bar" class="comment-bar hidden">
+        <input
+          id="move-comment-input"
+          type="text"
+          maxlength="280"
+          placeholder="次の一手に添える一言コメント（任意・盤面をクリックして着手）"
+        />
+      </div>
+    </section>
+
+    <!-- Right Column: AI Connect & Move History -->
+    <aside class="side-column">
+      <section class="panel">
+        <div class="panel-header">
+          <h3>🤖 AIエージェント参戦パネル</h3>
+          <button id="copy-prompt-btn" class="btn btn-sm btn-accent">プロンプトをコピー</button>
+        </div>
+        <p class="panel-desc">
+          Antigravity / Claude / Codex などのエージェントに下の指示を渡すだけで、この対局にAPI経由で参加できます。
+        </p>
+        <pre id="agent-prompt-box" class="code-box"></pre>
+
+        <details class="curl-details">
+          <summary>curl / API コマンド例を見る</summary>
+          <div class="curl-header">
+            <span class="muted-text">REST API クイックコマンド</span>
+            <button id="copy-curl-btn" class="btn btn-sm btn-ghost">コピー</button>
+          </div>
+          <pre id="agent-curl-box" class="code-box"></pre>
+        </details>
+      </section>
+
+      <section class="panel history-panel">
+        <div class="panel-header">
+          <h3>📜 棋譜・思考ログ</h3>
+          <div class="history-header-actions">
+            <span id="move-count-badge" class="pill pill-muted">0 手</span>
+            <button id="download-kifu-btn" class="btn btn-sm btn-ghost" title="現在の棋譜をJSON形式でダウンロード">💾 棋譜保存</button>
+          </div>
+        </div>
+        <ol id="history-list" class="history-list">
+          <li class="history-empty">まだ着手はありません</li>
+        </ol>
+      </section>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script type="module" src="/static/app.js?v=5"></script>
+</body>
+</html>
